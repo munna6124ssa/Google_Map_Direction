@@ -13,4 +13,27 @@ export default defineConfig({
       plugins: [tailwindcss, autoprefixer],
     },
   },
+  build: {
+    // Production optimizations
+    minify: 'terser',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          maps: ['@react-google-maps/api'],
+          ui: ['react-icons', 'react-toastify'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000,
+  },
+  server: {
+    port: 3000,
+    open: true,
+  },
+  preview: {
+    port: 10000,
+    host: '0.0.0.0',
+  },
 });

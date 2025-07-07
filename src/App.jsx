@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useCallback } from "react";
 import {
   GoogleMap,
   DirectionsRenderer,
@@ -9,14 +9,28 @@ import {
 import { FaLocationArrow, FaTimes, FaChevronDown, FaChevronUp } from "react-icons/fa";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { config, validateConfig } from "./config";
 
 const libraries = ["places"];
 
 function App() {
-  const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey:
-      import.meta.env.VITE_GOOGLE_MAPS_API_KEY ||
-      "AIzaSyBJZxWZlH0pbLeFMxeq9XPd8ktwfbD6xvs", // Replace with your API key
+  // Validate configuration
+  try {
+    validateConfig();
+  } catch (error) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-red-50">
+        <div className="text-center p-8 bg-white rounded-lg shadow-lg">
+          <h2 className="text-2xl font-bold text-red-600 mb-4">Configuration Error</h2>
+          <p className="text-gray-700">{error.message}</p>
+          <p className="text-sm text-gray-500 mt-2">Please check your environment variables.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: config.googleMapsApiKey,
     libraries,
   });
 
@@ -26,24 +40,45 @@ function App() {
   const [duration, setDuration] = useState("");
   const [travelMode, setTravelMode] = useState("DRIVING");
   const [isExpanded, setIsExpanded] = useState(true);
+  const [isCalculating, setIsCalculating] = useState(false);
 
   const fixedLocation = { lat: 23.2463, lng: 77.5019 }; // Fixed coordinates
   const originRef = useRef();
   const destinationRef = useRef();
 
-  if (!isLoaded) {
-    return <p className="text-center text-lg font-semibold">Loading map...</p>;
+  if (loadError) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-red-50">
+        <div className="text-center p-8 bg-white rounded-lg shadow-lg">
+          <h2 className="text-2xl font-bold text-red-600 mb-4">Map Loading Error</h2>
+          <p className="text-gray-700">Failed to load Google Maps.</p>
+          <p className="text-sm text-gray-500 mt-2">Please check your internet connection and API key.</p>
+        </div>
+      </div>
+    );
   }
 
-  async function calculateRoute() {
-    const origin = originRef.current.value;
-    const destination = destinationRef.current.value;
+  if (!isLoaded) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-blue-50">
+        <div className="text-center p-8 bg-white rounded-lg shadow-lg">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-lg font-semibold text-gray-700">Loading Google Maps...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const calculateRoute = useCallback(async () => {
+    const origin = originRef.current?.value?.trim();
+    const destination = destinationRef.current?.value?.trim();
 
     if (!origin || !destination) {
       toast.error("Please provide both origin and destination!");
       return;
     }
 
+    setIsCalculating(true);
     const directionsService = new google.maps.DirectionsService();
 
     try {
@@ -53,30 +88,52 @@ function App() {
         travelMode: google.maps.TravelMode[travelMode],
       });
 
-      if (results.routes.length === 0) throw new Error("No route found");
+      if (results.routes.length === 0) {
+        throw new Error("No route found");
+      }
 
       const route = results.routes[0].legs[0];
       setDirectionsResponse(results);
       setDistance(route.distance.text);
       setDuration(route.duration.text);
+      toast.success("Route calculated successfully!");
     } catch (error) {
       console.error("Route Calculation Error:", error.message);
-      toast.error("No direct route found for the selected travel mode.");
+      
+      // Clear previous results on error
+      setDirectionsResponse(null);
+      setDistance("");
+      setDuration("");
+      
+      // More specific error messages
+      if (error.message.includes("ZERO_RESULTS")) {
+        toast.error("No route found between these locations.");
+      } else if (error.message.includes("OVER_QUERY_LIMIT")) {
+        toast.error("API quota exceeded. Please try again later.");
+      } else if (error.message.includes("REQUEST_DENIED")) {
+        toast.error("API request denied. Please check your API key.");
+      } else {
+        toast.error("Unable to calculate route. Please try different locations.");
+      }
+    } finally {
+      setIsCalculating(false);
     }
-  }
+  }, [travelMode]);
 
-  function clearRoute() {
+  const clearRoute = useCallback(() => {
     setDirectionsResponse(null);
     setDistance("");
     setDuration("");
-    originRef.current.value = "";
-    destinationRef.current.value = "";
-  }
+    if (originRef.current) originRef.current.value = "";
+    if (destinationRef.current) destinationRef.current.value = "";
+  }, []);
 
-  function setOriginToFixedLocation() {
-    originRef.current.value = `${fixedLocation.lat}, ${fixedLocation.lng}`;
-    toast.success("Origin set to current location!");
-  }
+  const setOriginToFixedLocation = useCallback(() => {
+    if (originRef.current) {
+      originRef.current.value = `${fixedLocation.lat}, ${fixedLocation.lng}`;
+      toast.success("Origin set to current location!");
+    }
+  }, [fixedLocation]);
 
   return (
     <div className="relative h-screen w-full">
@@ -158,9 +215,17 @@ function App() {
             <div className="flex justify-between">
               <button
                 onClick={calculateRoute}
-                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring focus:ring-blue-300"
+                disabled={isCalculating}
+                className={`px-4 py-2 text-white rounded-lg focus:outline-none focus:ring focus:ring-blue-300 flex items-center ${
+                  isCalculating 
+                    ? 'bg-blue-300 cursor-not-allowed' 
+                    : 'bg-blue-500 hover:bg-blue-600'
+                }`}
               >
-                Calculate Route
+                {isCalculating && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                )}
+                {isCalculating ? 'Calculating...' : 'Calculate Route'}
               </button>
               <button
                 onClick={clearRoute}
