@@ -15,7 +15,7 @@ const libraries = ["places"];
 function App() {
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey:
-      process.env.REACT_APP_GOOGLE_MAPS_API_KEY ||
+      import.meta.env.VITE_GOOGLE_MAPS_API_KEY ||
       "AIzaSyBJZxWZlH0pbLeFMxeq9XPd8ktwfbD6xvs", // Replace with your API key
     libraries,
   });
