@@ -37,6 +37,8 @@ function App() {
   const [isCalculating, setIsCalculating] = useState(false);
   const [currentLocation, setCurrentLocation] = useState(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [directionsKey, setDirectionsKey] = useState(0);
+  const directionsRendererRef = useRef(null);
 
   const fixedLocation = { lat: 23.2463, lng: 77.5019 }; // Fixed coordinates
   const originRef = useRef();
@@ -94,11 +96,19 @@ function App() {
   }, [travelMode]);
 
   const clearRoute = useCallback(() => {
+    // Clear all route-related state
     setDirectionsResponse(null);
     setDistance("");
     setDuration("");
+    
+    // Clear input fields
     if (originRef.current) originRef.current.value = "";
     if (destinationRef.current) destinationRef.current.value = "";
+    
+    // Force DirectionsRenderer to re-render by changing its key
+    setDirectionsKey(prev => prev + 1);
+    
+    toast.success("Route cleared!");
   }, []);
 
   // Get current location from device
@@ -209,7 +219,21 @@ function App() {
         }}
         onLoad={(map) => setMap(map)}
       >
-        {directionsResponse && <DirectionsRenderer directions={directionsResponse} />}
+        <DirectionsRenderer 
+          key={directionsKey}
+          directions={directionsResponse}
+          onLoad={(directionsRenderer) => {
+            directionsRendererRef.current = directionsRenderer;
+          }}
+          options={{
+            suppressMarkers: false,
+            polylineOptions: {
+              strokeColor: "#4285F4",
+              strokeWeight: 5,
+              strokeOpacity: 0.8,
+            },
+          }}
+        />
 
         {/* Current Location Marker */}
         {currentLocation && (
